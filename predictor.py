@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 import cv2
 import torch
+import numpy as np
 from torchvision import transforms as T
 
 from maskrcnn_benchmark.modeling.detector import build_detection_model
@@ -159,7 +160,7 @@ class COCODemo(object):
         )
         return transform
 
-    def run_on_opencv_image(self, image):
+    def run_on_opencv_image(self, image, category):
         """
         Arguments:
             image (np.ndarray): an image as returned by OpenCV
@@ -169,18 +170,17 @@ class COCODemo(object):
                 of the detection properties can be found in the fields of
                 the BoxList via `prediction.fields()`
         """
+        cat_idx = self.CATEGORIES.index(category)
         predictions = self.compute_prediction(image)
         top_predictions = self.select_top_predictions(predictions)
-
         result = image.copy()
-        if self.show_mask_heatmaps:
-            return self.create_mask_montage(result, top_predictions)
-        result = self.overlay_boxes(result, top_predictions)
-        if self.cfg.MODEL.MASK_ON:
-            result = self.overlay_mask(result, top_predictions)
-        result = self.overlay_class_names(result, top_predictions)
-
-        return result
+        labels = top_predictions.get_field("labels").tolist()
+        if cat_idx in labels:
+            mask_idx = labels.index(cat_idx)
+            masks = top_predictions.get_field("mask").numpy()
+            mask = np.stack((masks[mask_idx][0],)*3, axis=-1)
+            return result * mask
+        return np.zeros_like(image)
 
     def compute_prediction(self, original_image):
         """
